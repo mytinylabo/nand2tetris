@@ -16,6 +16,12 @@
         D=M
         @FILL_BLACK
         D;JGT
+
+// Here's two sets of the same sequence of instructions
+// except for the value to be written(0 for white or -1 for black).
+// This is a way to keep each loop step simple
+// within constraint of lack of registers.
+
 (FILL_WHITE)
         @8192 // (512/16)*256
         D=A

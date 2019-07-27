@@ -1,7 +1,7 @@
 // Multiplies R0 and R1 and stores the result in R2.
 // (R0, R1, R2 refer to RAM[0], RAM[1], and RAM[2], respectively.)
 
-// R1を破壊的に扱って命令数を少し減らしたバージョン
+// Uses R2 as a counter to reduce the number of instructions.
 
         // initialize
         @R2
