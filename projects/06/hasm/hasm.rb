@@ -33,11 +33,9 @@ File.open(dst_path, mode='w') do |outfile|
     case parser.command_type
     when :A_COMMAND
       code = 0
-      if parser.symbol =~ /^-?[0-9]+$/
+      if parser.symbol =~ /^[0-9]+$/
         # Number
         code = parser.symbol.to_i
-        # Convert negative number to its complement
-        code = (1<<16) - code if code < 0
       elsif symbol_table.contains?(parser.symbol)
         # Existing symbol
         code = symbol_table.get_address(parser.symbol)

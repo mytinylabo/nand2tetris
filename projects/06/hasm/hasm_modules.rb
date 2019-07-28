@@ -2,7 +2,7 @@
 class HasmParser
   module PTN
     SYMBOL = '([a-zA-Z_.$:][a-zA-Z0-9_.$:]+)'
-    NUMSYM = '((?:-?[0-9]+)|(?:[a-zA-Z_.$:][a-zA-Z0-9_.$:]+))'
+    NUMSYM = '((?:[0-9]+)|(?:[a-zA-Z_.$:][a-zA-Z0-9_.$:]+))'
     DEST   = '(?:(A?M?D?)=)'
     AMD    = '([-!]?A|[-!]?M|[-!]?D)'
     AMD01  = '(A|M|D|0|1|-1)'
