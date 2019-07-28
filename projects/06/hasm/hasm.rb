@@ -9,17 +9,24 @@ raw_src = File.read(src_path)
 
 parser = HasmParser.new(raw_src)
 symbol_table = HasmSymbolTable.new
+next_address = 0
 
 # 1st pass: collect labels
 while parser.has_more_commands?
   parser.advance
   case parser.command_type
+  when :A_COMMAND
+    next_address += 1
+
   when :L_COMMAND
     if symbol_table.contains?(parser.symbol)
       parser.put_current_line
       raise 'symbol already defined'
     end
-    symbol_table.add_entry(parser.symbol, parser.address)
+    symbol_table.add_entry(parser.symbol, next_address)
+
+  when :C_COMMAND
+    next_address += 1
   end
 end
 

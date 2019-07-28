@@ -16,7 +16,6 @@ class HasmParser
 
     @line = ''
     @index = 0
-    @next_address = 0
 
     clear_command
   end
@@ -51,7 +50,6 @@ class HasmParser
 
       @command_type = :A_COMMAND
       @symbol = symbol
-      @next_address += 1
 
     when /^\(#{PTN::SYMBOL}\)$/
       # Label (pseudo operation)
@@ -68,16 +66,11 @@ class HasmParser
       @dest = dest || ''
       @comp = value ? value : left + ope + right
       @jump = jump || ''
-      @next_address += 1
 
     else
       put_current_line
       raise 'syntax error'
     end
-  end
-
-  def address
-    @next_address
   end
 
   def put_current_line
