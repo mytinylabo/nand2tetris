@@ -6,23 +6,23 @@
 /**
  * The Hack CPU (Central Processing unit), consisting of an ALU,
  * two registers named A and D, and a program counter named PC.
- * The CPU is designed to fetch and execute instructions written in 
+ * The CPU is designed to fetch and execute instructions written in
  * the Hack machine language. In particular, functions as follows:
- * Executes the inputted instruction according to the Hack machine 
+ * Executes the inputted instruction according to the Hack machine
  * language specification. The D and A in the language specification
  * refer to CPU-resident registers, while M refers to the external
- * memory location addressed by A, i.e. to Memory[A]. The inM input 
- * holds the value of this location. If the current instruction needs 
- * to write a value to M, the value is placed in outM, the address 
- * of the target location is placed in the addressM output, and the 
- * writeM control bit is asserted. (When writeM==0, any value may 
- * appear in outM). The outM and writeM outputs are combinational: 
- * they are affected instantaneously by the execution of the current 
- * instruction. The addressM and pc outputs are clocked: although they 
- * are affected by the execution of the current instruction, they commit 
- * to their new values only in the next time step. If reset==1 then the 
- * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
- * than to the address resulting from executing the current instruction. 
+ * memory location addressed by A, i.e. to Memory[A]. The inM input
+ * holds the value of this location. If the current instruction needs
+ * to write a value to M, the value is placed in outM, the address
+ * of the target location is placed in the addressM output, and the
+ * writeM control bit is asserted. (When writeM==0, any value may
+ * appear in outM). The outM and writeM outputs are combinational:
+ * they are affected instantaneously by the execution of the current
+ * instruction. The addressM and pc outputs are clocked: although they
+ * are affected by the execution of the current instruction, they commit
+ * to their new values only in the next time step. If reset==1 then the
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather
+ * than to the address resulting from executing the current instruction.
  */
 
 CHIP CPU {
@@ -34,10 +34,52 @@ CHIP CPU {
                          // the current program (reset==0).
 
     OUT outM[16],        // M value output
-        writeM,          // Write to M? 
+        writeM,          // Write to M?
         addressM[15],    // Address in data memory (of M)
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    Not(in=instruction[15], out=opA);
+
+    Or(a=opA, b=instruction[5], out=ldA);
+    And(a=instruction[15], b=instruction[4], out=ldD);
+    And(a=instruction[15], b=instruction[3], out=writeM);
+
+    Mux16(a=fromALU, b=instruction, sel=opA, out=toA);
+    ARegister(in=toA, load=ldA, out=fromA, out[0..14]=addressM);
+    Mux16(a=fromA, b=inM, sel=instruction[12], out=AorM);
+
+    DRegister(in=fromALU, load=ldD, out=fromD);
+
+    ALU(x=fromD, y=AorM,
+        zx=instruction[11],
+        nx=instruction[10],
+        zy=instruction[9],
+        ny=instruction[8],
+        f= instruction[7],
+        no=instruction[6],
+        out=fromALU, out=outM,
+        zr=zr, ng=ng
+    );
+
+    // makes jump flag
+    Not(in=instruction[2], out=notJ1);
+    Not(in=ng, out=notng);
+    Not(in=zr, out=notzr);
+
+    And(a=instruction[2], b=instruction[0], out=J1andJ3);
+    And(a=notJ1, b=instruction[0], out=notJ1andJ3);
+    And(a=notng, b=notzr, out=notNgAndNotZr);
+
+    And(a=J1andJ3, b=notNgAndNotZr, out=w1);
+    And(a=notJ1andJ3, b=notNgAndNotZr, out=w2);
+    And(a=instruction[2], b=ng, out=w3);
+    And(a=instruction[1], b=zr, out=w4);
+
+    Or8Way(in[0]=w1, in[1]=w2, in[2]=w3, in[4]=w4, in[5..7]=false, out=aluJmp);
+
+    // no need to jump when A operation
+    And(a=aluJmp, b=instruction[15], out=jmp);
+
+    PC(in=fromA, load=jmp, inc=true, reset=reset, out[0..14]=pc);
 }
