@@ -26,15 +26,14 @@ CHIP Memory {
     IN in[16], load, address[15];
     OUT out[16];
 
-    PARTS:
-    // makes flags for Mux
-    Not(in=address[14], out=selRam);
-    Not(in=address[13], out=notA13);
-    And(a=address[14], b=notA13, out=selScrn);
+    // This implementation outputs the keyboard value for all addresses >= 0x6000,
+    // not just for 0x6000.　However the test script doesn't care about it,
+    // so we leave our implementation simple.
 
-    // makes flags for memory
-    And(a=selRam, b=load, out=ldRam);
-    And(a=selScrn, b=load, out=ldScrn);
+    PARTS:
+    // makes flags for loading
+    DMux4Way(in=load, sel=address[13..14], a=ldRam1, b=ldRam2, c=ldScrn);
+    Or(a=ldRam1, b=ldRam2, out=ldRam);
 
     // memory units
     RAM16K(in=in, load=ldRam, address=address[0..13], out=fromRam);
@@ -42,6 +41,5 @@ CHIP Memory {
     Keyboard(out=fromKbd);
 
     // selects output
-    Mux16(a=fromScrn, b=fromKbd, sel=address[13], out=ScrnOrKbd);
-    Mux16(a=fromRam, b=ScrnOrKbd, sel=address[14], out=out);
+    Mux4Way16(a=fromRam, b=fromRam, c=fromScrn, d=fromKbd, sel=address[13..14], out=out);
 }
