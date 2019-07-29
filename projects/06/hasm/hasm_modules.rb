@@ -40,7 +40,8 @@ class HasmParser
   def advance
     clear_command
 
-    @line, @index = next_line
+    @line, index = next_line
+    @index = index + 1
     stripped_line = strip(@line)
 
     case stripped_line
@@ -74,7 +75,7 @@ class HasmParser
   end
 
   def put_current_line
-    puts "line:#{@index}| #{@line}"
+    puts "line:#{@index}| #{@line.chomp}"
   end
 
   private
