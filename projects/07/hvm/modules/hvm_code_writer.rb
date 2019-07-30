@@ -8,11 +8,14 @@ class HvmCodeWriter
 
   def set_filename(filename)
     @filename = filename
-    @indices[:static] = -1
   end
 
   def close
     @output.close
+  end
+
+  def write_comment(string)
+    @output.puts("// #{string}")
   end
 
   def write_arithmetic(operator)
@@ -43,31 +46,170 @@ class HvmCodeWriter
     asm = case command_type
     when :C_PUSH
       case segment.to_sym
-      when :constant
-        asm_push_constant(index)
+      when :constant then asm_push_constant(index)
+      when :static   then asm_push_static(index)
+      when :local    then asm_push_local(index)
+      when :argument then asm_push_argument(index)
+      when :this     then asm_push_this(index)
+      when :that     then asm_push_that(index)
+      when :pointer  then asm_push_pointer(index)
+      when :temp     then asm_push_temp(index)
       else
         raise "invalid segment: #{segment}"
       end
 
     when :C_POP
+      case segment.to_sym
+      when :static   then asm_pop_static(index)
+      when :local    then asm_pop_local(index)
+      when :argument then asm_pop_argument(index)
+      when :this     then asm_pop_this(index)
+      when :that     then asm_pop_that(index)
+      when :pointer  then asm_pop_pointer(index)
+      when :temp     then asm_pop_temp(index)
+      else
+        raise "invalid segment: #{segment}"
+      end
+
     else
       raise "invalid command_type: #{command_type.to_s}"
     end
 
-    asm ||= ''
     @output.puts(asm)
   end
 
   private
-  def asm_push_constant(index)
+  def push_base
     <<~asm.strip
-    @#{index}
-    D=A
     @SP
     AM=M+1
     A=A-1
     M=D
     asm
+  end
+
+  def push_direct_base(address)
+    <<~asm.strip
+    @#{address}
+    D=M
+    #{push_base}
+    asm
+  end
+
+  def push_indirect_offset_le_2(segment, index)
+    <<~asm.strip
+    @#{segment}
+    #{['A=M', 'A=M+1', %w[A=M+1 A=A+1].join("\n")][index]}
+    D=M
+    asm
+  end
+
+  def push_indirect_offset_ge_3(segment, index)
+    <<~asm.strip
+    @#{segment}
+    D=M
+    @#{index}
+    A=D+A
+    D=M
+    asm
+  end
+
+  def push_indirect_base(segment, index)
+    <<~asm.strip
+    #{index <= 2 ? push_indirect_offset_le_2(segment, index) : push_indirect_offset_ge_3(segment, index)}
+    #{push_base}
+    asm
+  end
+
+  def asm_push_constant(immediate)
+    <<~asm.strip
+    @#{immediate}
+    D=A
+    #{push_base}
+    asm
+  end
+
+  def asm_push_static(index)
+    push_direct_base("#{@filename}.#{index}")
+  end
+
+  def asm_push_local(index)
+    push_indirect_base('LCL', index)
+  end
+
+  def asm_push_argument(index)
+    push_indirect_base('ARG', index)
+  end
+
+  def asm_push_this(index)
+    push_indirect_base('THIS', index)
+  end
+
+  def asm_push_that(index)
+    push_indirect_base('THAT', index)
+  end
+
+  def asm_push_pointer(index)
+    push_direct_base(3 + index)
+  end
+
+  def asm_push_temp(index)
+    push_direct_base(5 + index)
+  end
+
+  def pop_base
+    <<~asm.strip
+    @SP
+    AM=M-1
+    D=M
+    asm
+  end
+
+  def pop_direct_base(address)
+    <<~asm.strip
+    #{pop_base}
+    @#{address}
+    M=D
+    asm
+  end
+
+  def pop_indirect_base(segment, index)
+    offset  = [index == 0 ? 'A=M' : 'A=M+1']
+    offset += (index - 1).times.map{ 'A=A+1' }
+    <<~asm.strip
+    #{pop_base}
+    @#{segment}
+    #{offset.join("\n")}
+    M=D
+    asm
+  end
+
+  def asm_pop_static(index)
+    pop_direct_base("#{@filename}.#{index}")
+  end
+
+  def asm_pop_local(index)
+    pop_indirect_base('LCL', index)
+  end
+
+  def asm_pop_argument(index)
+    pop_indirect_base('ARG', index)
+  end
+
+  def asm_pop_this(index)
+    pop_indirect_base('THIS', index)
+  end
+
+  def asm_pop_that(index)
+    pop_indirect_base('THAT', index)
+  end
+
+  def asm_pop_pointer(index)
+    pop_direct_base(3 + index)
+  end
+
+  def asm_pop_temp(index)
+    pop_direct_base(5 + index)
   end
 
   def asm_neg
@@ -156,7 +298,13 @@ writer.set_filename('Test')
   writer.write_arithmetic(operator)
 end
 
-writer.write_push_pop(:C_PUSH, 'constant', 0)
+%w[constant static local argument this that pointer temp].each_with_index do |segment, index|
+  writer.write_push_pop(:C_PUSH, segment, index)
+end
+
+%w[static local argument this that pointer temp].each_with_index do |segment, index|
+  writer.write_push_pop(:C_POP, segment, index)
+end
 
 probe.rewind
 # Just check there's no blank line

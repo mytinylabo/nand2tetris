@@ -71,7 +71,7 @@ class HvmParser
   end
 
   def current_line
-    "line:#{@index}| #{@line.chomp}"
+    "line:#{@index}: #{@line.chomp}"
   end
 
   private

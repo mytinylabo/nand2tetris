@@ -16,7 +16,11 @@ writer.set_filename(File.basename(src_path, '.vm'))
 # Translates a vm file into the target asm file
 while parser.has_more_commands?
   parser.advance
-  case parser.command_typea
+
+  # TODO: Make adding comments optional
+  writer.write_comment("#{File.basename(src_path)} #{parser.current_line}")
+
+  case parser.command_type
   when :C_ARITHMETIC
     writer.write_arithmetic(parser.arg1)
 
