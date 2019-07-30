@@ -72,7 +72,7 @@ class HvmCodeWriter
       end
 
     else
-      raise "invalid command_type: #{command_type.to_s}"
+      raise "invalid command_type: #{command_type}"
     end
 
     @output.puts(asm)
