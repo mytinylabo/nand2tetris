@@ -120,7 +120,7 @@ EOS
 
 parser = HvmParser.new(src)
 assert !parser.has_more_commands?
-assert_equal parser.current_line, 'line:0| '
+assert_equal parser.current_line, 'line:0: '
 
 # Test stack & arithmetic commands
 src =<<EOS
@@ -140,4 +140,4 @@ while parser.has_more_commands?
 end
 assert_equal types, [:C_PUSH, :C_PUSH, :C_ARITHMETIC, :C_POP]
 assert_equal arg1s, ['argument', 'constant', 'sub', 'local']
-assert_equal parser.current_line, 'line:4| pop  local  0'
+assert_equal parser.current_line, 'line:4: pop  local  0'
