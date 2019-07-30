@@ -47,6 +47,8 @@ class HvmParser
   end
 
   def advance
+    clear_command
+
     @line, index = next_line
     @index = index + 1 # 1-based indexing
     stripped_line = strip(@line)
