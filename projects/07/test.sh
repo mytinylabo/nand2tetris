@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eu
+
 echo 'Testing VM translator modules...'
 ruby ./hvm/modules/hvm_syntax.rb
 ruby ./hvm/modules/hvm_parser.rb
