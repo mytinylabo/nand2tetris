@@ -2,9 +2,9 @@ require_relative 'hvm_syntax'
 
 class HvmParser
   Token = {
-    segment: /(?:argument|local|static|constant|this|that|pointer|temp)/,
-    index:   /[0-9]+/,
-    label:   /[a-zA-Z_.:][a-zA-Z0-9_.:]*/
+    segment:   /(?:argument|local|static|constant|this|that|pointer|temp)/,
+    index:     /[0-9]+/,
+    label:     /[a-zA-Z_.:][a-zA-Z0-9_.:]*/
   }
 
   Syntax = [
@@ -22,6 +22,9 @@ class HvmParser
     HvmSyntax.new(/label (#{Token[:label]})/,   :C_LABEL),
     HvmSyntax.new(/goto (#{Token[:label]})/,    :C_GOTO),
     HvmSyntax.new(/if-goto (#{Token[:label]})/, :C_IF),
+    HvmSyntax.new(/function (#{Token[:label]}) (#{Token[:index]})/, :C_FUNCTION),
+    HvmSyntax.new(/call (#{Token[:label]}) (#{Token[:index]})/,         :C_CALL),
+    HvmSyntax.new(/return/, :C_RETURN)
   ]
 
   def initialize(raw_src)
@@ -179,3 +182,19 @@ while parser.has_more_commands?
   valid.push(!parser.advance.nil?)
 end
 assert_equal valid, [true, true, false, false, false]
+
+# Test function commands
+src =<<EOS
+function foo 3
+call bar 2
+return
+EOS
+
+parser = HvmParser.new(src)
+
+parser.advance
+assert_equal [parser.command_type, parser.arg1, parser.arg2], [:C_FUNCTION, 'foo', 3]
+parser.advance
+assert_equal [parser.command_type, parser.arg1, parser.arg2], [:C_CALL, 'bar', 2]
+parser.advance
+assert_equal parser.command_type, :C_RETURN

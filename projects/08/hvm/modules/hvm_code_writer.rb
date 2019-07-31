@@ -90,6 +90,19 @@ class HvmCodeWriter
     @output.puts(asm_if(label))
   end
 
+  def write_function(function_name, num_locals)
+    @output.puts(asm_function(function_name, num_locals))
+  end
+
+  def write_call(function_name, num_locals)
+    @indices[:call] += 1
+    @output.puts(asm_call(function_name, num_locals, @indices[:call]))
+  end
+
+  def write_return
+    @output.puts(asm_return)
+  end
+
   private
   def push_d
     <<~asm.strip
@@ -334,6 +347,115 @@ class HvmCodeWriter
     D;JNE
     asm
   end
+
+  def function_locals_le_2(function_name, num_locals)
+    <<~asm.strip
+    (#{function_name})
+    #{(%w[@SP AM=M+1 A=A-1 M=0] * num_locals).join("\n")}
+    asm
+  end
+
+  def function_locals_ge_3(function_name, num_locals)
+    <<~asm.strip
+    (#{function_name})
+    @SP
+    A=M
+    #{(%w[M=0 AD=A+1] * num_locals).join("\n")}
+    @SP
+    M=D
+    asm
+  end
+
+  def asm_function(function_name, num_locals)
+    if num_locals <= 0
+      "(#{function_name})"
+    elsif num_locals <= 2
+      function_locals_le_2(function_name, num_locals)
+    else
+      function_locals_ge_3(function_name, num_locals)
+    end
+  end
+
+  def asm_call(function_name, num_locals, index)
+    <<~asm.strip
+    @RET_CALL_#{index}
+    D=A
+    #{push_d}
+    @LCL
+    D=A
+    #{push_d}
+    @ARG
+    D=A
+    #{push_d}
+    @THIS
+    D=A
+    #{push_d}
+    @THAT
+    D=A
+    #{push_d}
+    D=A
+    @#{num_locals}
+    D=D-A
+    @5
+    D=D-A
+    @ARG
+    M=D
+    @SP
+    D=M
+    @LCL
+    M=D
+    @#{function_name}
+    0;JMP
+    (RET_CALL_#{index})
+    asm
+  end
+
+  def asm_return
+    # TODO: Should be a subroutine
+    <<~asm.strip
+    @5
+    D=A
+    @LCL
+    A=M-D
+    D=M
+    @R13
+    M=D
+    @SP
+    AM=M-1
+    D=M
+    @ARG
+    A=M
+    M=D
+    D=A
+    @SP
+    M=D+1
+    @LCL
+    D=M
+    @R14
+    AM=D-1
+    D=M
+    @THAT
+    M=D
+    @R14
+    AM=M-1
+    D=M
+    @THIS
+    M=D
+    @R14
+    AM=M-1
+    D=M
+    @ARG
+    M=D
+    @R14
+    AM=M-1
+    D=M
+    @LCL
+    M=D
+    @R13
+    A=M
+    0;JMP
+    asm
+  end
 end
 
 return if $0 != __FILE__
@@ -361,6 +483,12 @@ end
 writer.write_label('foo')
 writer.write_goto('bar')
 writer.write_if('baz')
+
+writer.write_function('foo', 0)
+writer.write_function('bar', 2)
+writer.write_function('baz', 4)
+writer.write_function('foo', 6)
+writer.write_return()
 
 probe.rewind
 # Just check there's no blank line

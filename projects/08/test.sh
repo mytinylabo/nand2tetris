@@ -17,6 +17,7 @@ list=(
     ../07/MemoryAccess/StaticTest/StaticTest
     ./ProgramFlow/BasicLoop/BasicLoop
     ./ProgramFlow/FibonacciSeries/FibonacciSeries
+    ./FunctionCalls/SimpleFunction/SimpleFunction
 )
 
 for src in ${list[@]}
