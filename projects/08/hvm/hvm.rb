@@ -4,50 +4,63 @@ require 'pathname'
 require_relative 'modules/hvm_parser'
 require_relative 'modules/hvm_code_writer'
 
-# TODO: Accept a directory(multiple .vm files)
-src_path = ARGV[0]
-dst_path = Pathname(src_path).sub_ext('.asm').to_s
-raw_src = File.read(src_path)
+src_path = Pathname(ARGV[0])
+src_list = []
+dst_path = ''
+if src_path.file?
+  src_list = [src_path]
+  dst_path = src_path.sub_ext('.asm')
 
-parser = HvmParser.new(raw_src)
+elsif src_path.directory?
+  src_list = src_path.glob('*.vm')
+  dst_path = src_path + src_path.split.last.sub_ext('.asm')
+
+else
+  raise "invalid input path: #{src_path}"
+end
+
 writer = HvmCodeWriter.new(File.open(dst_path, mode='w'))
-writer.set_filename(File.basename(src_path, '.vm'))
 
-# Translates a vm file into the target asm file
-while parser.has_more_commands?
-  parser.advance
+src_list.each do |src_file|
+  parser = HvmParser.new(src_file.read)
+  writer.set_filename(src_file.basename('.vm'))
 
-  # TODO: Make adding comments optional
-  writer.write_comment("#{File.basename(src_path)} #{parser.current_line}")
+  # Translates a vm file into the target asm file
+  while parser.has_more_commands?
+    parser.advance
 
-  case parser.command_type
-  when :C_ARITHMETIC
-    writer.write_arithmetic(parser.arg1)
+    # TODO: Make adding comments optional
+    writer.write_comment("#{src_file.basename} #{parser.current_line}")
 
-  when :C_PUSH, :C_POP
-    writer.write_push_pop(parser.command_type, parser.arg1, parser.arg2)
+    case parser.command_type
+    when :C_ARITHMETIC
+      writer.write_arithmetic(parser.arg1)
 
-  when :C_LABEL
-    writer.write_label(parser.arg1)
+    when :C_PUSH, :C_POP
+      writer.write_push_pop(parser.command_type, parser.arg1, parser.arg2)
 
-  when :C_GOTO
-    writer.write_goto(parser.arg1)
+    when :C_LABEL
+      writer.write_label(parser.arg1)
 
-  when :C_IF
-    writer.write_if(parser.arg1)
+    when :C_GOTO
+      writer.write_goto(parser.arg1)
 
-  when :C_FUNCTION
-    writer.write_function(parser.arg1, parser.arg2)
+    when :C_IF
+      writer.write_if(parser.arg1)
 
-  when :C_CALL
-    writer.write_call(parser.arg1, parser.arg2)
+    when :C_FUNCTION
+      writer.write_function(parser.arg1, parser.arg2)
 
-  when :C_RETURN
-    writer.write_return
+    when :C_CALL
+      writer.write_call(parser.arg1, parser.arg2)
 
-  else
-    $stderr.puts parser.current_line
-    raise 'syntax error'
+    when :C_RETURN
+      writer.write_return
+
+    else
+      $stderr.puts parser.current_line
+      raise 'syntax error'
+    end
   end
 end
 
