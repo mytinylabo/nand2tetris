@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
 require 'pathname'
-require_relative 'modules/hvm_parser.rb'
-require_relative 'modules/hvm_code_writer.rb'
+require_relative 'modules/hvm_parser'
+require_relative 'modules/hvm_code_writer'
 
 # TODO: Accept a directory(multiple .vm files)
 src_path = ARGV[0]

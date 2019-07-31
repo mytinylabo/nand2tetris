@@ -88,7 +88,7 @@ class HvmCodeWriter
     asm
   end
 
-  def push_direct_base(address)
+  def push_direct(address)
     <<~asm.strip
     @#{address}
     D=M
@@ -114,7 +114,7 @@ class HvmCodeWriter
     asm
   end
 
-  def push_indirect_base(segment, index)
+  def push_indirect(segment, index)
     <<~asm.strip
     #{index <= 2 ? push_indirect_offset_le_2(segment, index) : push_indirect_offset_ge_3(segment, index)}
     #{push_base}
@@ -130,31 +130,31 @@ class HvmCodeWriter
   end
 
   def asm_push_static(index)
-    push_direct_base("#{@filename}.#{index}")
+    push_direct("#{@filename}.#{index}")
   end
 
   def asm_push_local(index)
-    push_indirect_base('LCL', index)
+    push_indirect('LCL', index)
   end
 
   def asm_push_argument(index)
-    push_indirect_base('ARG', index)
+    push_indirect('ARG', index)
   end
 
   def asm_push_this(index)
-    push_indirect_base('THIS', index)
+    push_indirect('THIS', index)
   end
 
   def asm_push_that(index)
-    push_indirect_base('THAT', index)
+    push_indirect('THAT', index)
   end
 
   def asm_push_pointer(index)
-    push_direct_base(3 + index)
+    push_direct(3 + index)
   end
 
   def asm_push_temp(index)
-    push_direct_base(5 + index)
+    push_direct(5 + index)
   end
 
   def pop_base
@@ -165,7 +165,7 @@ class HvmCodeWriter
     asm
   end
 
-  def pop_direct_base(address)
+  def pop_direct(address)
     <<~asm.strip
     #{pop_base}
     @#{address}
@@ -173,7 +173,7 @@ class HvmCodeWriter
     asm
   end
 
-  def pop_indirect_base(segment, index)
+  def pop_indirect(segment, index)
     offset  = [index == 0 ? 'A=M' : 'A=M+1']
     offset += (index - 1).times.map{ 'A=A+1' }
     <<~asm.strip
@@ -185,31 +185,31 @@ class HvmCodeWriter
   end
 
   def asm_pop_static(index)
-    pop_direct_base("#{@filename}.#{index}")
+    pop_direct("#{@filename}.#{index}")
   end
 
   def asm_pop_local(index)
-    pop_indirect_base('LCL', index)
+    pop_indirect('LCL', index)
   end
 
   def asm_pop_argument(index)
-    pop_indirect_base('ARG', index)
+    pop_indirect('ARG', index)
   end
 
   def asm_pop_this(index)
-    pop_indirect_base('THIS', index)
+    pop_indirect('THIS', index)
   end
 
   def asm_pop_that(index)
-    pop_indirect_base('THAT', index)
+    pop_indirect('THAT', index)
   end
 
   def asm_pop_pointer(index)
-    pop_direct_base(3 + index)
+    pop_direct(3 + index)
   end
 
   def asm_pop_temp(index)
-    pop_direct_base(5 + index)
+    pop_direct(5 + index)
   end
 
   def asm_neg
@@ -228,7 +228,7 @@ class HvmCodeWriter
     asm
   end
 
-  def calc_base(expression)
+  def calc(expression)
     <<~asm.strip
     @SP
     AM=M-1
@@ -239,22 +239,22 @@ class HvmCodeWriter
   end
 
   def asm_add
-    calc_base('M=D+M')
+    calc('M=D+M')
   end
 
   def asm_sub
-    calc_base('M=M-D')
+    calc('M=M-D')
   end
 
   def asm_and
-    calc_base('M=D&M')
+    calc('M=D&M')
   end
 
   def asm_or
-    calc_base('M=D|M')
+    calc('M=D|M')
   end
 
-  def comp_base(operator, index)
+  def comp(operator, index)
     <<~asm.strip
     @SP
     AM=M-1
@@ -272,15 +272,15 @@ class HvmCodeWriter
   end
 
   def asm_eq(index)
-    comp_base('EQ', index)
+    comp('EQ', index)
   end
 
   def asm_gt(index)
-    comp_base('GT', index)
+    comp('GT', index)
   end
 
   def asm_lt(index)
-    comp_base('LT', index)
+    comp('LT', index)
   end
 end
 
