@@ -2,5 +2,7 @@ tmp
 tools/bin/*.dat
 projects/07/**/*.asm
 projects/07/**/*.hack
+projects/08/**/*.asm
+projects/08/**/*.hack
 *.out
 .DS_Store

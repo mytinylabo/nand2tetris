@@ -27,6 +27,15 @@ while parser.has_more_commands?
   when :C_PUSH, :C_POP
     writer.write_push_pop(parser.command_type, parser.arg1, parser.arg2)
 
+  when :C_LABEL
+    writer.write_label(parser.arg1)
+
+  when :C_GOTO
+    writer.write_goto(parser.arg1)
+
+  when :C_IF
+    writer.write_if(parser.arg1)
+
   else
     $stderr.puts parser.current_line
     raise 'syntax error'

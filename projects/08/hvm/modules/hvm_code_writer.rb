@@ -78,6 +78,18 @@ class HvmCodeWriter
     @output.puts(asm)
   end
 
+  def write_label(label)
+    @output.puts(asm_label(label))
+  end
+
+  def write_goto(label)
+    @output.puts(asm_goto(label))
+  end
+
+  def write_if(label)
+    @output.puts(asm_if(label))
+  end
+
   private
   def push_d
     <<~asm.strip
@@ -301,6 +313,27 @@ class HvmCodeWriter
   def asm_lt(index)
     comp('LT', index)
   end
+
+  def asm_label(label)
+    "(#{label})"
+  end
+
+  def asm_goto(label)
+    <<~asm.strip
+    @#{label}
+    0;JMP
+    asm
+  end
+
+  def asm_if(label)
+    <<~asm.strip
+    @SP
+    AM=M-1
+    D=M
+    @#{label}
+    D;JNE
+    asm
+  end
 end
 
 return if $0 != __FILE__
@@ -324,6 +357,10 @@ end
 %w[static local argument this that pointer temp].each_with_index do |segment, index|
   writer.write_push_pop(:C_POP, segment, index)
 end
+
+writer.write_label('foo')
+writer.write_goto('bar')
+writer.write_if('baz')
 
 probe.rewind
 # Just check there's no blank line

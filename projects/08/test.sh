@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -eu
+
 echo 'Testing VM translator modules...'
 ruby ./hvm/modules/hvm_syntax.rb
 ruby ./hvm/modules/hvm_parser.rb
@@ -13,6 +15,8 @@ list=(
     ../07/MemoryAccess/BasicTest/BasicTest
     ../07/MemoryAccess/PointerTest/PointerTest
     ../07/MemoryAccess/StaticTest/StaticTest
+    ./ProgramFlow/BasicLoop/BasicLoop
+    ./ProgramFlow/FibonacciSeries/FibonacciSeries
 )
 
 for src in ${list[@]}

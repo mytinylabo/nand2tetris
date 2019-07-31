@@ -3,7 +3,8 @@ require_relative 'hvm_syntax'
 class HvmParser
   Token = {
     segment: /(?:argument|local|static|constant|this|that|pointer|temp)/,
-    index:   /[0-9]+/
+    index:   /[0-9]+/,
+    label:   /[a-zA-Z_.:][a-zA-Z0-9_.:]*/
   }
 
   Syntax = [
@@ -17,7 +18,10 @@ class HvmParser
     HvmSyntax.new(/lt/,  :C_ARITHMETIC),
     HvmSyntax.new(/and/, :C_ARITHMETIC),
     HvmSyntax.new(/or/,  :C_ARITHMETIC),
-    HvmSyntax.new(/not/, :C_ARITHMETIC)
+    HvmSyntax.new(/not/, :C_ARITHMETIC),
+    HvmSyntax.new(/label (#{Token[:label]})/,   :C_LABEL),
+    HvmSyntax.new(/goto (#{Token[:label]})/,    :C_GOTO),
+    HvmSyntax.new(/if-goto (#{Token[:label]})/, :C_IF),
   ]
 
   def initialize(raw_src)
@@ -141,3 +145,37 @@ end
 assert_equal types, [:C_PUSH, :C_PUSH, :C_ARITHMETIC, :C_POP]
 assert_equal arg1s, ['argument', 'constant', 'sub', 'local']
 assert_equal parser.current_line, 'line:4: pop  local  0'
+
+# Test program flow commands
+src =<<EOS
+label foo
+goto bar
+if-goto baz
+EOS
+
+parser = HvmParser.new(src)
+types = []
+arg1s = []
+while parser.has_more_commands?
+  parser.advance
+  types.push(parser.command_type)
+  arg1s.push(parser.arg1)
+end
+assert_equal types, [:C_LABEL, :C_GOTO, :C_IF]
+assert_equal arg1s, %w[foo bar baz]
+
+# Test labels
+src =<<EOS
+label foO.12:bAr_Baz
+label :
+label 34foo
+label bar$
+label b-a-z
+EOS
+
+parser = HvmParser.new(src)
+valid = []
+while parser.has_more_commands?
+  valid.push(!parser.advance.nil?)
+end
+assert_equal valid, [true, true, false, false, false]
