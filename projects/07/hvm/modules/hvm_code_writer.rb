@@ -79,7 +79,7 @@ class HvmCodeWriter
   end
 
   private
-  def push_base
+  def push_d
     <<~asm.strip
     @SP
     AM=M+1
@@ -92,7 +92,7 @@ class HvmCodeWriter
     <<~asm.strip
     @#{address}
     D=M
-    #{push_base}
+    #{push_d}
     asm
   end
 
@@ -117,7 +117,7 @@ class HvmCodeWriter
   def push_indirect(segment, index)
     <<~asm.strip
     #{index <= 2 ? push_indirect_offset_le_2(segment, index) : push_indirect_offset_ge_3(segment, index)}
-    #{push_base}
+    #{push_d}
     asm
   end
 
@@ -125,7 +125,7 @@ class HvmCodeWriter
     <<~asm.strip
     @#{immediate}
     D=A
-    #{push_base}
+    #{push_d}
     asm
   end
 
@@ -157,7 +157,7 @@ class HvmCodeWriter
     push_direct(5 + index)
   end
 
-  def pop_base
+  def pop_to_d
     <<~asm.strip
     @SP
     AM=M-1
@@ -167,21 +167,40 @@ class HvmCodeWriter
 
   def pop_direct(address)
     <<~asm.strip
-    #{pop_base}
+    #{pop_to_d}
     @#{address}
     M=D
     asm
   end
 
-  def pop_indirect(segment, index)
-    offset  = [index == 0 ? 'A=M' : 'A=M+1']
-    offset += (index - 1).times.map{ 'A=A+1' }
+  def pop_indirect_le_6(segment, index)
+    offset = [index == 0 ? 'A=M' : 'A=M+1'] + (index - 1).times.map{ 'A=A+1' }
     <<~asm.strip
-    #{pop_base}
+    #{pop_to_d}
     @#{segment}
     #{offset.join("\n")}
     M=D
     asm
+  end
+
+  def pop_indirect_ge_7(segment, index)
+    <<~asm.strip
+    @#{segment}
+    D=M
+    @#{index}
+    D=D+A
+    @R13
+    M=D
+    #{pop_to_d}
+    @R13
+    A=M
+    M=D
+    asm
+  end
+
+  def pop_indirect(segment, index)
+    index <= 6 ? pop_indirect_le_6(segment, index)
+               : pop_indirect_ge_7(segment, index)
   end
 
   def asm_pop_static(index)
