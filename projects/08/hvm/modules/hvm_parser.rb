@@ -127,7 +127,7 @@ EOS
 
 parser = HvmParser.new(src)
 assert !parser.has_more_commands?
-assert_equal parser.current_line, 'line:0: '
+assert_equal 'line:0: ', parser.current_line
 
 # Test stack & arithmetic commands
 src =<<EOS
@@ -145,9 +145,9 @@ while parser.has_more_commands?
   types.push(parser.command_type)
   arg1s.push(parser.arg1)
 end
-assert_equal types, [:C_PUSH, :C_PUSH, :C_ARITHMETIC, :C_POP]
-assert_equal arg1s, ['argument', 'constant', 'sub', 'local']
-assert_equal parser.current_line, 'line:4: pop  local  0'
+assert_equal [:C_PUSH, :C_PUSH, :C_ARITHMETIC, :C_POP], types
+assert_equal ['argument', 'constant', 'sub', 'local'],  arg1s
+assert_equal 'line:4: pop  local  0', parser.current_line
 
 # Test program flow commands
 src =<<EOS
@@ -164,8 +164,8 @@ while parser.has_more_commands?
   types.push(parser.command_type)
   arg1s.push(parser.arg1)
 end
-assert_equal types, [:C_LABEL, :C_GOTO, :C_IF]
-assert_equal arg1s, %w[foo bar baz]
+assert_equal [:C_LABEL, :C_GOTO, :C_IF], types
+assert_equal %w[foo bar baz], arg1s
 
 # Test labels
 src =<<EOS
@@ -181,7 +181,7 @@ valid = []
 while parser.has_more_commands?
   valid.push(!parser.advance.nil?)
 end
-assert_equal valid, [true, true, false, false, false]
+assert_equal [true, true, false, false, false], valid
 
 # Test function commands
 src =<<EOS
@@ -193,8 +193,8 @@ EOS
 parser = HvmParser.new(src)
 
 parser.advance
-assert_equal [parser.command_type, parser.arg1, parser.arg2], [:C_FUNCTION, 'foo', 3]
+assert_equal [:C_FUNCTION, 'foo', 3], [parser.command_type, parser.arg1, parser.arg2]
 parser.advance
-assert_equal [parser.command_type, parser.arg1, parser.arg2], [:C_CALL, 'bar', 2]
+assert_equal [:C_CALL, 'bar', 2], [parser.command_type, parser.arg1, parser.arg2]
 parser.advance
-assert_equal parser.command_type, :C_RETURN
+assert_equal :C_RETURN, parser.command_type
