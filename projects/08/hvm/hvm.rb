@@ -1,8 +1,17 @@
 #!/usr/bin/env ruby
 
+require 'optparse'
 require 'pathname'
 require_relative 'modules/hvm_parser'
 require_relative 'modules/hvm_code_writer'
+
+opts = ARGV.getopts('cp')
+
+# Comment source VM code?
+with_comment = opts['c']
+
+# Without calling Sys.init?
+plain_translation = opts['p']
 
 src_path = Pathname(ARGV[0])
 src_list = []
@@ -20,6 +29,7 @@ else
 end
 
 writer = HvmCodeWriter.new(File.open(dst_path, mode='w'))
+writer.write_init(plain: plain_translation)
 
 src_list.each do |src_file|
   parser = HvmParser.new(src_file.read)
@@ -29,8 +39,7 @@ src_list.each do |src_file|
   while parser.has_more_commands?
     parser.advance
 
-    # TODO: Make adding comments optional
-    writer.write_comment("#{src_file.basename} #{parser.current_line}")
+    writer.write_comment("#{src_file.basename} #{parser.current_line}") if with_comment
 
     case parser.command_type
     when :C_ARITHMETIC
