@@ -19,7 +19,7 @@ class JackTokenizer
 
   def initialize(raw_src)
     @src_lines = raw_src.each_line.to_a
-    @src = raw_src.lstrip
+    @src = raw_src
     @index = 1
 
     clear_token
@@ -38,6 +38,7 @@ class JackTokenizer
       token, match = token_matching(@src)
 
       if token.nil?
+        # No rule matched with the remaining source
         raise "couldn't find a token"
       end
 
@@ -74,13 +75,20 @@ class JackTokenizer
         # Nothing to do
       end
 
+      # Consume the source string
       @src = match.post_match
+
+      # Loop until a token is detected
       break unless @token_type.nil? && has_more_tokens?
     end
   end
 
   def current_line
-    "line:#{@index}: #{@src_lines[@index - 1]}"
+    @src_lines[@index - 1].chomp
+  end
+
+  def current_line_index
+    @index
   end
 
   private
@@ -94,8 +102,10 @@ class JackTokenizer
   end
 
   def token_matching(string)
+    # Test all rules against `string`
     matches = Rules.map{ |token| /\A#{token.pattern}/.match(string) }
     token_with_matches = Rules.zip(matches).reject{ |token, match| match.nil? }
+    # Choose the longest match
     token_with_matches.max_by{ |token, match| match.to_s.length }
   end
 end
@@ -138,11 +148,23 @@ exception = assert_raise(RuntimeError) do
   tokenizer = JackTokenizer.new("123invalid_token")
   tokenizer.advance
 end
-assert_equal exception.message, "couldn't find a token"
+assert_equal "couldn't find a token", exception.message
 
 # Comment separetes tokens
 tokenizer = JackTokenizer.new("foo/* bar */baz")
 tokenizer.advance
-assert_equal tokenizer.identifier, 'foo'
+assert_equal 'foo', tokenizer.identifier
 tokenizer.advance
-assert_equal tokenizer.identifier, 'baz'
+assert_equal 'baz', tokenizer.identifier
+
+# Test current line
+src =<<EOS
+
+
+class Main { ... }
+EOS
+
+tokenizer = JackTokenizer.new(src)
+tokenizer.advance
+assert_equal 3, tokenizer.current_line_index
+assert_equal "class Main { ... }", tokenizer.current_line
