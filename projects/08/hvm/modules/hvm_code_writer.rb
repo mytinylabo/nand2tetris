@@ -3,6 +3,7 @@ class HvmCodeWriter
   def initialize(output)
     @output = output
     @filename = ''
+    @function = ''
     @indices = Hash.new(-1)
   end
 
@@ -16,6 +17,11 @@ class HvmCodeWriter
 
   def write_comment(string)
     @output.puts("// #{string}")
+  end
+
+  def write_init(plain: false)
+    # When `plain` is true, Sys.init won't be called
+    @output.puts(asm_bootstrap(plain))
   end
 
   def write_arithmetic(operator)
@@ -79,18 +85,19 @@ class HvmCodeWriter
   end
 
   def write_label(label)
-    @output.puts(asm_label(label))
+    @output.puts(asm_label(localize(label)))
   end
 
   def write_goto(label)
-    @output.puts(asm_goto(label))
+    @output.puts(asm_goto(localize(label)))
   end
 
   def write_if(label)
-    @output.puts(asm_if(label))
+    @output.puts(asm_if(localize(label)))
   end
 
   def write_function(function_name, num_locals)
+    @function = function_name
     @output.puts(asm_function(function_name, num_locals))
   end
 
@@ -104,6 +111,25 @@ class HvmCodeWriter
   end
 
   private
+  def localize(label)
+    "#{@function}$#{label}"
+  end
+
+  def asm_bootstrap(plain)
+    <<~asm.strip
+    @256
+    D=A
+    @SP
+    M=D
+    #{plain ? %w[@END_BOOTSTRAP 0;JMP].join("\n") : asm_call('Sys.init', 0, 'Sys.init')}
+    (SYS_CALL)
+    #{call_body}
+    (SYS_RETURN)
+    #{return_body}
+    (END_BOOTSTRAP)
+    asm
+  end
+
   def push_d
     <<~asm.strip
     @SP
@@ -376,42 +402,68 @@ class HvmCodeWriter
     end
   end
 
-  def asm_call(function_name, num_locals, index)
+  def call_body
     <<~asm.strip
-    @RET_CALL_#{index}
-    D=A
-    #{push_d}
+    @SP
+    A=M
+    M=D
     @LCL
-    D=A
-    #{push_d}
+    D=M
+    @SP
+    AM=M+1
+    M=D
     @ARG
-    D=A
-    #{push_d}
+    D=M
+    @SP
+    AM=M+1
+    M=D
     @THIS
-    D=A
-    #{push_d}
+    D=M
+    @SP
+    AM=M+1
+    M=D
     @THAT
+    D=M
+    @SP
+    AM=M+1
+    M=D
+    @4
     D=A
-    #{push_d}
-    D=A
-    @#{num_locals}
-    D=D-A
-    @5
-    D=D-A
+    @R13
+    D=D+M
+    @SP
+    D=M-D
     @ARG
     M=D
     @SP
-    D=M
+    MD=M+1
     @LCL
     M=D
+    @R14
+    A=M
+    0;JMP
+    asm
+  end
+
+  def asm_call(function_name, num_locals, index)
+    <<~asm.strip
+    @#{num_locals}
+    D=A
+    @R13
+    M=D
     @#{function_name}
+    D=A
+    @R14
+    M=D
+    @RET_CALL_#{index}
+    D=A
+    @SYS_CALL
     0;JMP
     (RET_CALL_#{index})
     asm
   end
 
-  def asm_return
-    # TODO: Should be a subroutine
+  def return_body
     <<~asm.strip
     @5
     D=A
@@ -456,6 +508,13 @@ class HvmCodeWriter
     0;JMP
     asm
   end
+
+  def asm_return
+    <<~asm.strip
+    @SYS_RETURN
+    0;JMP
+    asm
+  end
 end
 
 return if $0 != __FILE__
@@ -467,6 +526,9 @@ include Test::Unit::Assertions
 probe = Tempfile.open
 writer = HvmCodeWriter.new(probe)
 writer.set_filename('Test')
+
+writer.write_init(plain: true)
+writer.write_init(plain: false)
 
 %w[neg not add sub and or eq gt lt].each do |operator|
   writer.write_arithmetic(operator)
@@ -488,6 +550,7 @@ writer.write_function('foo', 0)
 writer.write_function('bar', 2)
 writer.write_function('baz', 4)
 writer.write_function('foo', 6)
+writer.write_call('baz', 4)
 writer.write_return()
 
 probe.rewind
