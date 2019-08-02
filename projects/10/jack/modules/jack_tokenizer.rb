@@ -1,7 +1,7 @@
 
 class JackTokenizer
   keywords = %w[class constructor function method field static var int char
-                bloolean void true false null this let do if else while return].join('|')
+                boolean void true false null this let do if else while return].join('|')
   symbols  = '{|}|\(|\)|\[|\]|\.|,|;|\+|-|\*|\/|&|\||<|>|=|~'
 
   Token = Struct.new(:pattern, :type)
@@ -158,19 +158,37 @@ tokenizer.advance
 assert_equal 32767, tokenizer.int_val
 
 # Integer value should be within (0..32767)
+tokenizer = JackTokenizer.new("32768")
 assert_raise(RangeError) do
-  tokenizer = JackTokenizer.new("32768")
   tokenizer.advance
 end
 
 # Identifier cannot start with a number
+tokenizer = JackTokenizer.new("123invalid_token")
 exception = assert_raise(RuntimeError) do
-  tokenizer = JackTokenizer.new("123invalid_token")
   tokenizer.advance
 end
 assert_equal "couldn't find a token", exception.message
 
-# Comment separetes tokens
+# String cannot include newline characters
+src =<<EOS
+"string with
+newline"
+EOS
+tokenizer = JackTokenizer.new(src)
+exception = assert_raise(RuntimeError) do
+  tokenizer.advance
+end
+assert_equal "couldn't find a token", exception.message
+
+# String cannot include double quotations
+tokenizer = JackTokenizer.new('"this is " string"')
+exception = assert_raise(RuntimeError) do
+  tokenizer.advance while tokenizer.has_more_tokens?
+end
+assert_equal "couldn't find a token", exception.message
+
+# Comment separetes tokenss
 tokenizer = JackTokenizer.new("foo/* bar */baz")
 tokenizer.advance
 assert_equal 'foo', tokenizer.identifier
