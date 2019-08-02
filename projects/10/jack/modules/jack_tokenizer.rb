@@ -6,15 +6,18 @@ class JackTokenizer
 
   Token = Struct.new(:pattern, :type)
   Rules = [
+    # Tokens of Jack language
     Token.new(/(?:#{keywords})/,        :KEYWORD),
     Token.new(/(?:#{symbols})/,         :SYMBOL),
     Token.new(/[a-zA-Z_][a-zA-Z0-9_]*/, :IDENTIFIER),
     Token.new(/"[^\r\n]*?"/,            :STRING_CONST),
     Token.new(/[0-9]+\b/,               :INT_CONST),
-    Token.new(%r!//[^\r\n]*!,           :COMMENT),
-    Token.new(%r!/\*.*?\*/!m,           :COMMENT),
-    Token.new(/[\t ]+/,                 :TAB_SPACE),
-    Token.new(/\R/,                     :NEWLINE)
+
+    # Not tokens but need to be handled properly
+    Token.new(%r!//[^\r\n]*!, :COMMENT),
+    Token.new(%r!/\*.*?\*/!m, :COMMENT),
+    Token.new(/[\t ]+/,       :TAB_SPACE),
+    Token.new(/\R/,           :NEWLINE)
   ]
 
   def initialize(raw_src)
@@ -83,7 +86,15 @@ class JackTokenizer
       @src = match.post_match
 
       # Loop until a token is detected
-      break unless @token_type.nil? && has_more_tokens?
+      break unless @token_type.nil?
+
+      if has_more_tokens?
+        next
+      else
+        # Hit the end of the source
+        @token_type = :EOS
+        break
+      end
     end
   end
 
@@ -136,8 +147,8 @@ foo bar2 _b_a_z
 "foobarbaz123"
 EOS
 
+tokenizer = JackTokenizer.new(src)
 assert_nothing_raised do
-  tokenizer = JackTokenizer.new(src)
   tokenizer.advance while tokenizer.has_more_tokens?
 end
 
@@ -182,3 +193,38 @@ tokenizer = JackTokenizer.new(src)
 tokenizer.advance
 assert_equal 8, tokenizer.current_line_index
 assert_equal "class Main { ... }", tokenizer.current_line
+
+# Test comment on the botton
+src =<<EOS
+
+class Main { ... }
+//
+/*
+ * comment
+
+ */
+
+EOS
+
+tokenizer = JackTokenizer.new(src)
+assert_nothing_raised do
+  tokenizer.advance while tokenizer.has_more_tokens?
+end
+assert_equal :EOS, tokenizer.token_type
+
+# Test comment only
+src =<<EOS
+
+//
+/*
+ * comment
+
+ */
+
+EOS
+
+tokenizer = JackTokenizer.new(src)
+assert_nothing_raised do
+  tokenizer.advance
+end
+assert_equal :EOS, tokenizer.token_type
