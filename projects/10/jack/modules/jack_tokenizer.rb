@@ -12,7 +12,7 @@ class JackTokenizer
     Token.new(/"[^\r\n]*?"/,            :STRING_CONST),
     Token.new(/[0-9]+\b/,               :INT_CONST),
     Token.new(%r!//[^\r\n]*!,           :COMMENT),
-    Token.new(%r!/\*.*?\*/!,            :COMMENT),
+    Token.new(%r!/\*.*?\*/!m,           :COMMENT),
     Token.new(/[\t ]+/,                 :TAB_SPACE),
     Token.new(/\R/,                     :NEWLINE)
   ]
@@ -56,10 +56,10 @@ class JackTokenizer
         @identifier = match.to_s
 
       when :INT_CONST
-        int = match.to_s.to_i
-        if (0..32767).include?(int)
+        int_val = match.to_s.to_i
+        if (0..32767).include?(int_val)
           @token_type = token.type
-          @int_val = match.to_s
+          @int_val = int_val
         else
           raise RangeError
         end
@@ -71,7 +71,11 @@ class JackTokenizer
       when :NEWLINE
         @index += 1
 
-      when :COMMENT, :TAB_SPACE
+      when :COMMENT
+        # e.g. If there're 4 lines, they have 3 newline characters
+        @index += match.to_s.lines.length - 1
+
+      when :TAB_SPACE
         # Nothing to do
       end
 
@@ -137,6 +141,11 @@ assert_nothing_raised do
   tokenizer.advance while tokenizer.has_more_tokens?
 end
 
+# int_val should return Integer(not String)
+tokenizer = JackTokenizer.new("32767")
+tokenizer.advance
+assert_equal 32767, tokenizer.int_val
+
 # Integer value should be within (0..32767)
 assert_raise(RangeError) do
   tokenizer = JackTokenizer.new("32768")
@@ -160,11 +169,16 @@ assert_equal 'baz', tokenizer.identifier
 # Test current line
 src =<<EOS
 
+//
+/*
+ * comment
+
+ */
 
 class Main { ... }
 EOS
 
 tokenizer = JackTokenizer.new(src)
 tokenizer.advance
-assert_equal 3, tokenizer.current_line_index
+assert_equal 8, tokenizer.current_line_index
 assert_equal "class Main { ... }", tokenizer.current_line
