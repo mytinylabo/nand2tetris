@@ -1,8 +1,8 @@
 
-require_relative 'jack/modules/jack_tokenizer.rb'
+require_relative 'jack/modules/jack_tokenizer'
 
 def xml_safe(string)
-  string.gsub(/[<>&]/, { '<' => '&lt;', '>' => '&gt;', '&' => '&amp;'  })
+  string.gsub(/[<>&]/, { '<' => '&lt;', '>' => '&gt;', '&' => '&amp;' })
 end
 
 src_path = ARGV[0]

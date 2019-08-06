@@ -98,8 +98,35 @@ class JackTokenizer
     end
   end
 
+  def to_enum
+    copied_self = self.dup
+
+    Enumerator.new do |y|
+      while copied_self.has_more_tokens?
+        copied_self.advance
+
+        tupple = [copied_self.token_type]
+
+        tupple << case copied_self.token_type
+        when :KEYWORD      then copied_self.keyword
+        when :SYMBOL       then copied_self.symbol
+        when :IDENTIFIER   then copied_self.identifier
+        when :STRING_CONST then copied_self.string_val
+        when :INT_CONST    then copied_self.int_val
+        when :EOS          then nil
+        end
+
+        tupple << { line:  copied_self.current_line,
+                    index: copied_self.current_line_index }
+
+        y << tupple
+      end
+    end
+  end
+
   def current_line
-    @src_lines[@index - 1].chomp
+    line = @src_lines[@index - 1]
+    !line.nil? ? line.chomp : ''
   end
 
   def current_line_index
@@ -246,3 +273,25 @@ assert_nothing_raised do
   tokenizer.advance
 end
 assert_equal :EOS, tokenizer.token_type
+
+# Test to_enum
+src =<<EOS
+class {
+  foo "bar" 10 * baz
+}
+EOS
+tokenizer = JackTokenizer.new(src)
+tokens = tokenizer.to_enum
+
+assert_equal :CLASS, tokens.next[1]
+assert_equal '{',    tokens.next[1]
+assert_equal 'foo',  tokens.peek[1]
+assert_equal 'foo',  tokens.next[1]
+
+type, token, raw = tokens.next
+assert_equal '  foo "bar" 10 * baz', raw[:line]
+assert_equal 2, raw[:index]
+
+# Enumerator from `to_enum` should not affect the original tokenizer
+tokenizer.advance
+assert_equal :CLASS, tokenizer.keyword
