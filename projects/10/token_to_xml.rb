@@ -1,4 +1,3 @@
-
 require_relative 'jack/modules/jack_tokenizer'
 
 def xml_safe(string)
