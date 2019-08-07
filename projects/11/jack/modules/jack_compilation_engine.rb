@@ -1,3 +1,5 @@
+require_relative 'jack_symbol_table'
+require_relative 'jack_vm_writer'
 
 class JackCompilationEngine
   NULLFILE = File::open(File::NULL, mode='w')
@@ -6,7 +8,12 @@ class JackCompilationEngine
     @tokens = tokens
 
     @xml_out = xml_out
-    @vm_out = vm_out
+    @vm_writer = JackVmWriter.new(vm_out)
+
+    @symbol_table = JackSymbolTable.new
+
+    @class_name = ''
+    @subroutine_name = ''
 
     @current_line = ''
     @current_index = 0
@@ -62,9 +69,9 @@ class JackCompilationEngine
         kind = pop(:KEYWORD)
         return_type = next?(:KEYWORD, :VOID) ? pop(:KEYWORD, :VOID)
                                              : pop(:TYPE)
-        subroutine_name = pop(:IDENTIFIER)
+        @subroutine_name = pop(:IDENTIFIER)
 
-        # @symbol_table new_function
+        @symbol_table.start_subroutine
 
         pop(:SYMBOL, '(')
 
@@ -101,6 +108,9 @@ class JackCompilationEngine
       pop(:SYMBOL, '{')
 
       compile_var_dec
+
+      n_locals = @symbol_table.var_count(:VAR)
+      @vm_writer.write_function("#{@class_name}.#{@subroutine_name}", n_locals)
 
       compile_statements
 
@@ -222,7 +232,7 @@ class JackCompilationEngine
       pop(:KEYWORD, :DO)
 
       subroutine_call(pop(:IDENTIFIER))
-      # Here the stack top should be the return value
+      @vm_writer.write_pop(:TEMP, 0) # Discards the return value
 
       pop(:SYMBOL, ';')
 
@@ -234,9 +244,14 @@ class JackCompilationEngine
 
       pop(:KEYWORD, :RETURN)
 
-      if !next?(:SYMBOL, ';')
+      if next?(:SYMBOL, ';')
+        # Pushes a dummy return value
+        @vm_writer.write_push(:CONST, 0)
+      else
         compile_expression
       end
+
+      @vm_writer.write_return
 
       pop(:SYMBOL, ';')
 
@@ -252,31 +267,52 @@ class JackCompilationEngine
       while next?(:SYMBOL, ops)
         op = pop(:SYMBOL)
         compile_term
+
+        write_arithmetic(op)
       end
 
     end
   end
 
+  def write_arithmetic(op_token)
+    case op_token
+    when '+' then @vm_writer.write_arithmetic(:ADD)
+    when '-' then @vm_writer.write_arithmetic(:SUB)
+    when '*' then @vm_writer.write_call('Math.multiply', 2)
+    when '/' then @vm_writer.write_call('Math.divide', 2)
+    when '&' then @vm_writer.write_arithmetic(:AND)
+    when '|' then @vm_writer.write_arithmetic(:OR)
+    when '<' then @vm_writer.write_arithmetic(:LT)
+    when '>' then @vm_writer.write_arithmetic(:GT)
+    when '=' then @vm_writer.write_arithmetic(:EQ)
+    end
+  end
+
   def compile_expression_list
+    n_args = 0
     non_terminal :expressionList do
 
       next if next?(:SYMBOL, ')') # No argument
 
       compile_expression
+      n_args += 1
 
       while next?(:SYMBOL, ',')
         pop(:SYMBOL, ',')
         compile_expression
+        n_args += 1
       end
 
     end
+    n_args
   end
 
   def compile_term
     non_terminal :term do
 
       if next?(:INT_CONST)
-        pop(:INT_CONST)
+        int_val = pop(:INT_CONST)
+        @vm_writer.write_push(:CONST, int_val)
 
       elsif next?(:STRING_CONST)
         pop(:STRING_CONST)
@@ -324,11 +360,16 @@ class JackCompilationEngine
       subroutine_name = pop(:IDENTIFIER)
     end
 
-    # Needs to check if the receiver exists in this scope?
-
     pop(:SYMBOL, '(')
-    compile_expression_list
+    n_args = compile_expression_list
     pop(:SYMBOL, ')')
+
+    if receiver.nil?
+      # WIP
+    else
+      @vm_writer.write_call("#{receiver}.#{subroutine_name}", n_args)
+    end
+
   end
 
   private
