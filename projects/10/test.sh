@@ -34,12 +34,16 @@ list=(
     ExpressionLessSquare/Main
     ExpressionLessSquare/Square
     ExpressionLessSquare/SquareGame
+    Square/Main
+    Square/Square
+    Square/SquareGame
+    ArrayTest/Main
 )
 
 for src in ${list[@]}
 do
     echo $src
-    ruby ./syntax_tree_to_xml.rb ${src}.jack >$tmp_path
+    ruby ./parse_tree_to_xml.rb ${src}.jack >$tmp_path
     ../../tools/TextComparer.sh ${src}.xml $tmp_path
     rm $tmp_path
 done

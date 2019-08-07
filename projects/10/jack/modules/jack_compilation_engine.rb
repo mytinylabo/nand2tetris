@@ -221,25 +221,8 @@ class JackCompilationEngine
 
       pop(:KEYWORD, :DO)
 
-      # Subroutine call
-      leftmost = pop(:IDENTIFIER)
-
-      subroutine_name = nil
-      receiver = nil
-      if next?(:SYMBOL, '(')
-        subroutine_name = leftmost
-
-      else
-        receiver = leftmost
-        pop(:SYMBOL, '.')
-        subroutine_name = pop(:IDENTIFIER)
-      end
-
-      # Needs to check if the receiver exists in this scope?
-
-      pop(:SYMBOL, '(')
-      compile_expression_list
-      pop(:SYMBOL, ')')
+      subroutine_call(pop(:IDENTIFIER))
+      # Here the stack top should be the return value
 
       pop(:SYMBOL, ';')
 
@@ -292,21 +275,66 @@ class JackCompilationEngine
   def compile_term
     non_terminal :term do
 
-      # WIP: this is Just enough to pass ExpressionLessSquare test
-      if next?(:KEYWORD, [:TRUE, :FALSE, :NULL, :THIS])
+      if next?(:INT_CONST)
+        pop(:INT_CONST)
+
+      elsif next?(:STRING_CONST)
+        pop(:STRING_CONST)
+
+      elsif next?(:KEYWORD, [:TRUE, :FALSE, :NULL, :THIS])
         pop(:KEYWORD)
 
       elsif next?(:IDENTIFIER)
-        pop(:IDENTIFIER)
+        identifier = pop(:IDENTIFIER)
+
+        if next?(:SYMBOL, '[')
+          # Indexer access
+          pop(:SYMBOL, '[')
+          compile_expression
+          pop(:SYMBOL, ']')
+
+        elsif next?(:SYMBOL, ['(', '.'])
+          subroutine_call(identifier)
+          # Here the stack top should be the return value
+        end
+
+      elsif next?(:SYMBOL, '(')
+        pop(:SYMBOL, '(')
+        compile_expression
+        pop(:SYMBOL, ')')
+
+      elsif next?(:SYMBOL, ['-', '~'])
+        op = pop(:SYMBOL)
+        compile_term
+
       end
 
     end
   end
 
+  def subroutine_call(leftmost)
+    subroutine_name = nil
+    receiver = nil
+    if next?(:SYMBOL, '(')
+      subroutine_name = leftmost
+
+    else
+      receiver = leftmost
+      pop(:SYMBOL, '.')
+      subroutine_name = pop(:IDENTIFIER)
+    end
+
+    # Needs to check if the receiver exists in this scope?
+
+    pop(:SYMBOL, '(')
+    compile_expression_list
+    pop(:SYMBOL, ')')
+  end
+
   private
   # Just check the next token without advancing
   def next?(expected_type, expected_tokens = [])
-    next_type, next_token = @tokens.peek
+    next_type, next_token = tokenizer{ @tokens.peek }
 
     # Checks token type
     primitive = next_type == :KEYWORD && [:INT, :CHAR, :BOOLEAN].include?(next_token)
@@ -325,7 +353,7 @@ class JackCompilationEngine
 
   # Get the next token with advancing
   def pop(expected_type, expected_tokens = [])
-    next_type, next_token, raw = @tokens.next # Consumes the next token
+    next_type, next_token, raw = tokenizer{ @tokens.next } # Consumes the next token
     @current_line = raw[:line]
     @current_index = raw[:index]
 
@@ -338,25 +366,35 @@ class JackCompilationEngine
       next_type == expected_type
     end
 
+    expected_tokens = [expected_tokens].flatten
+    token_str = expected_tokens.join("' or '")
+    error_message = "#{expected_type} '#{token_str}' expected but was #{next_type} '#{next_token}'"
+
     if !type_valid
-      fail "token type <#{expected_type}> expected but was <#{next_type}> '#{next_token}'"
+      fail error_message
     end
 
     # Checks token content
-    expected_tokens = [expected_tokens].flatten
-    token_str = expected_tokens.join("' or '")
-
     if expected_tokens.empty? || expected_tokens.include?(next_token)
       write_token_as_xml(next_type, next_token)
       next_token
     else
-      fail "#{expected_type} '#{token_str}' expected but was '#{next_token}'"
+      fail error_message
     end
   end
 
   def fail(message)
     $stderr.puts "line:#{@current_index}: #{@current_line}"
     raise message
+  end
+
+  # Wrapper to catch exceptions from tokenizer
+  def tokenizer
+    yield
+
+  rescue RangeError, RuntimeError => ex
+    $stderr.print 'invalid token detected around '
+    fail ex.message
   end
 
   def non_terminal(tag)
@@ -370,16 +408,12 @@ class JackCompilationEngine
   end
 
   def write_token_as_xml(type, token)
-    tag = type.to_s.downcase
-
-    token_str = case type
-    when :IDENTIFIER, :INT_CONST
-      token.to_s
-    when :STRING_CONST
-      token.tr('"', '')
-    else
-      token.to_s.downcase
-    end
+    tag, token_str = case type
+      when :IDENTIFIER   then [type.to_s.downcase, token.to_s]
+      when :INT_CONST    then ["integerConstant",  token.to_s]
+      when :STRING_CONST then ["stringConstant",   token.tr('"', '')]
+      else                    [type.to_s.downcase, token.to_s.downcase]
+      end
 
     @xml_out.puts "#{indent}<#{tag}> #{xml_safe(token_str)} </#{tag}>"
   end
@@ -417,14 +451,23 @@ class Klass {
       do Array.new(true);
     }
     else {
-      while (cond) {
+      while ((min < total) | (total < max)) {
         let count = b;
         if (flag) { let b = a + b; }
-        else      { return; }
+        else      { return a / b; }
       }
     }
 
     return total;
+  }
+
+  method void task() {
+    let pnum = 1234;
+    let nnum = -3456;
+    do foo.bar(baz(), "foo", bar + (3 * -2));
+    let foobar = Foo.baz(null, false, foo[bar(baz)]) / ~bit;
+
+    return;
   }
 }
 EOS
