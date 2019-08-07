@@ -14,6 +14,7 @@ class JackCompilationEngine
 
     @class_name = ''
     @subroutine_name = ''
+    @indices = nil
 
     @current_line = ''
     @current_index = 0
@@ -72,6 +73,7 @@ class JackCompilationEngine
         @subroutine_name = pop(:IDENTIFIER)
 
         @symbol_table.start_subroutine
+        @indices = Hash.new(-1)
 
         pop(:SYMBOL, '(')
 
@@ -92,7 +94,7 @@ class JackCompilationEngine
         arg_type = pop(:TYPE)
         arg_name = pop(:IDENTIFIER)
 
-        # @symbol_table add
+        @symbol_table.define(arg_name, arg_type, :ARG)
 
         break unless next?(:SYMBOL, ',')
 
@@ -127,13 +129,13 @@ class JackCompilationEngine
         type  = pop(:TYPE)
         var_name  = pop(:IDENTIFIER)
 
-        # @symbol_table add
+        @symbol_table.define(var_name, type, :VAR)
 
         while next?(:SYMBOL, ',')
           pop(:SYMBOL, ',')
           var_name  = pop(:IDENTIFIER)
 
-          # @symbol_table add
+          @symbol_table.define(var_name, type, :VAR)
         end
 
         pop(:SYMBOL, ';')
@@ -163,21 +165,39 @@ class JackCompilationEngine
       pop(:KEYWORD, :LET)
 
       var_name = pop(:IDENTIFIER)
+      kind = @symbol_table.kind_of(var_name)
 
-      # Needs to check if the variable exists in this scope?
+      if kind == :NONE
+        fail "undefined variable: #{var_name}"
+      end
+
+      segment = to_segment(kind)
+
+      index = @symbol_table.index_of(var_name)
 
       # Indexer
       if next?(:SYMBOL, '[')
+        # Gets the base pointer
+        @vm_writer.write_push(segment, index)
+
         pop(:SYMBOL, '[')
         compile_expression
-        # Here the stack top should be the value of indexer
         pop(:SYMBOL, ']')
+
+        # Offsets the pointer
+        @vm_writer.write_arithmetic(:ADD)
+
+        # Saves to `that` segment
+        @vm_writer.write_pop(:POINTER, 1)
+        segment = :THAT
+        index = 0
       end
 
       pop(:SYMBOL, '=')
 
       compile_expression
-      # Here the stack top should be the right value
+
+      @vm_writer.write_pop(segment, index)
 
       pop(:SYMBOL, ';')
 
@@ -189,21 +209,33 @@ class JackCompilationEngine
 
       pop(:KEYWORD, :IF)
 
+      @indices[:if] += 1
+      label_else  = "ELSE_#{@indices[:if]}"
+      label_endif = "ENDIF_#{@indices[:if]}"
+
       pop(:SYMBOL, '(')
       compile_expression
-      # Here the stack top should be the condition value
       pop(:SYMBOL, ')')
+
+      @vm_writer.write_arithmetic(:NOT)
+      @vm_writer.write_if(label_else)
 
       pop(:SYMBOL, '{')
       compile_statements
       pop(:SYMBOL, '}')
 
+      @vm_writer.write_goto(label_endif)
+
       if next?(:KEYWORD, :ELSE)
         pop(:KEYWORD, :ELSE)
+
+        @vm_writer.write_label(label_else)
 
         pop(:SYMBOL, '{')
         compile_statements
         pop(:SYMBOL, '}')
+
+        @vm_writer.write_label(label_endif)
       end
 
     end
@@ -214,14 +246,25 @@ class JackCompilationEngine
 
       pop(:KEYWORD, :WHILE)
 
+      @indices[:while] += 1
+      label_while    = "WHILE_#{@indices[:while]}"
+      label_endwhile = "ENDWHILE_#{@indices[:while]}"
+
+      @vm_writer.write_label(label_while)
+
       pop(:SYMBOL, '(')
       compile_expression
-      # Here the stack top should be the condition value
       pop(:SYMBOL, ')')
+
+      @vm_writer.write_arithmetic(:NOT)
+      @vm_writer.write_if(label_endwhile)
 
       pop(:SYMBOL, '{')
       compile_statements
       pop(:SYMBOL, '}')
+
+      @vm_writer.write_goto(label_while)
+      @vm_writer.write_label(label_endwhile)
 
     end
   end
@@ -288,6 +331,15 @@ class JackCompilationEngine
     end
   end
 
+  def to_segment(kind)
+    case kind
+    when :STATIC then :STATIC
+    when :FIELD  then :THIS
+    when :ARG    then :ARG
+    when :VAR    then :LOCAL
+    end
+  end
+
   def compile_expression_list
     n_args = 0
     non_terminal :expressionList do
@@ -317,21 +369,40 @@ class JackCompilationEngine
       elsif next?(:STRING_CONST)
         pop(:STRING_CONST)
 
+      elsif next?(:KEYWORD, :TRUE)
+        pop(:KEYWORD)
+        @vm_writer.write_push(:CONST, 1)
+        @vm_writer.write_arithmetic(:NEG)
+
+      elsif next?(:KEYWORD, [:FALSE, :NULL])
+        pop(:KEYWORD)
+        @vm_writer.write_push(:CONST, 0)
+
       elsif next?(:KEYWORD, [:TRUE, :FALSE, :NULL, :THIS])
         pop(:KEYWORD)
+        # WIP
 
       elsif next?(:IDENTIFIER)
         identifier = pop(:IDENTIFIER)
+        kind = @symbol_table.kind_of(identifier)
 
         if next?(:SYMBOL, '[')
           # Indexer access
+          fail "undefined variable: #{identifier}" if kind == :NONE
           pop(:SYMBOL, '[')
           compile_expression
           pop(:SYMBOL, ']')
 
+          #WIP
+
         elsif next?(:SYMBOL, ['(', '.'])
           subroutine_call(identifier)
-          # Here the stack top should be the return value
+
+        else
+          fail "undefined variable: #{identifier}" if kind == :NONE
+          index = @symbol_table.index_of(identifier)
+          @vm_writer.write_push(to_segment(kind), index)
+
         end
 
       elsif next?(:SYMBOL, '(')
@@ -343,6 +414,10 @@ class JackCompilationEngine
         op = pop(:SYMBOL)
         compile_term
 
+        case op
+        when '-' then @vm_writer.write_arithmetic(:NEG)
+        when '~' then @vm_writer.write_arithmetic(:NOT)
+        end
       end
 
     end
