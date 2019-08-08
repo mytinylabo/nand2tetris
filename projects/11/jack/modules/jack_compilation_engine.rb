@@ -13,8 +13,7 @@ class JackCompilationEngine
     @symbol_table = JackSymbolTable.new
 
     @class_name = ''
-    @subroutine_name = ''
-    @indices = nil
+    @subroutine = nil
 
     @current_line = ''
     @current_index = 0
@@ -48,13 +47,13 @@ class JackCompilationEngine
         var_type  = pop(:TYPE)
         var_name  = pop(:IDENTIFIER)
 
-        # @symbol_table add
+        @symbol_table.define(var_name, var_type, scope)
 
         while next?(:SYMBOL, ',')
           pop(:SYMBOL, ',')
           var_name  = pop(:IDENTIFIER)
 
-          # @symbol_table add
+          @symbol_table.define(var_name, var_type, scope)
         end
 
         pop(:SYMBOL, ';')
@@ -70,10 +69,9 @@ class JackCompilationEngine
         kind = pop(:KEYWORD)
         return_type = next?(:KEYWORD, :VOID) ? pop(:KEYWORD, :VOID)
                                              : pop(:TYPE)
-        @subroutine_name = pop(:IDENTIFIER)
+        name = pop(:IDENTIFIER)
 
-        @symbol_table.start_subroutine
-        @indices = Hash.new(-1)
+        start_subroutine(kind, return_type, name)
 
         pop(:SYMBOL, '(')
 
@@ -87,8 +85,21 @@ class JackCompilationEngine
     end
   end
 
+  Subroutine = Struct.new(:kind, :return_type, :name, :indices)
+
+  def start_subroutine(kind, return_type, name)
+    @subroutine = Subroutine.new(kind, return_type, name, Hash.new(-1))
+    @symbol_table.start_subroutine
+  end
+
   def compile_parameter_list
     non_terminal :parameterList do
+
+      if @subroutine.kind == :METHOD
+        # Registers a dummy entry to shift index
+        # since `this` will be passed implicitly
+        @symbol_table.define('this', @class_name, :ARG)
+      end
 
       while next?(:TYPE)
         arg_type = pop(:TYPE)
@@ -112,7 +123,21 @@ class JackCompilationEngine
       compile_var_dec
 
       n_locals = @symbol_table.var_count(:VAR)
-      @vm_writer.write_function("#{@class_name}.#{@subroutine_name}", n_locals)
+      @vm_writer.write_function("#{@class_name}.#{@subroutine.name}", n_locals)
+
+      case @subroutine.kind
+      when :CONSTRUCTOR
+        # Allocate space for the new instance
+        @vm_writer.write_push(:CONST, @symbol_table.var_count(:FIELD))
+        @vm_writer.write_call('Memory.alloc', 1)
+        @vm_writer.write_pop(:POINTER, 0)
+
+      when :METHOD
+        # Sets `this` pointer implicitly passed via the first argument
+        @vm_writer.write_push(:ARG, 0)
+        @vm_writer.write_pop(:POINTER, 0)
+
+      end
 
       compile_statements
 
@@ -209,9 +234,9 @@ class JackCompilationEngine
 
       pop(:KEYWORD, :IF)
 
-      @indices[:if] += 1
-      label_else  = "ELSE_#{@indices[:if]}"
-      label_endif = "ENDIF_#{@indices[:if]}"
+      @subroutine.indices[:if] += 1
+      label_else  = "ELSE_#{@subroutine.indices[:if]}"
+      label_endif = "ENDIF_#{@subroutine.indices[:if]}"
 
       pop(:SYMBOL, '(')
       compile_expression
@@ -225,18 +250,19 @@ class JackCompilationEngine
       pop(:SYMBOL, '}')
 
       @vm_writer.write_goto(label_endif)
+      @vm_writer.write_label(label_else)
 
       if next?(:KEYWORD, :ELSE)
         pop(:KEYWORD, :ELSE)
 
-        @vm_writer.write_label(label_else)
 
         pop(:SYMBOL, '{')
         compile_statements
         pop(:SYMBOL, '}')
 
-        @vm_writer.write_label(label_endif)
       end
+
+      @vm_writer.write_label(label_endif)
 
     end
   end
@@ -246,9 +272,9 @@ class JackCompilationEngine
 
       pop(:KEYWORD, :WHILE)
 
-      @indices[:while] += 1
-      label_while    = "WHILE_#{@indices[:while]}"
-      label_endwhile = "ENDWHILE_#{@indices[:while]}"
+      @subroutine.indices[:while] += 1
+      label_while    = "WHILE_#{@subroutine.indices[:while]}"
+      label_endwhile = "ENDWHILE_#{@subroutine.indices[:while]}"
 
       @vm_writer.write_label(label_while)
 
@@ -288,7 +314,7 @@ class JackCompilationEngine
       pop(:KEYWORD, :RETURN)
 
       if next?(:SYMBOL, ';')
-        # Pushes a dummy return value
+        # Pushes a dummy value to return
         @vm_writer.write_push(:CONST, 0)
       else
         compile_expression
@@ -306,8 +332,7 @@ class JackCompilationEngine
 
       compile_term
 
-      ops = %w[+ - * / & | < > =]
-      while next?(:SYMBOL, ops)
+      while next?(:SYMBOL, %w[+ - * / & | < > =])
         op = pop(:SYMBOL)
         compile_term
 
@@ -368,11 +393,12 @@ class JackCompilationEngine
 
       elsif next?(:STRING_CONST)
         pop(:STRING_CONST)
+        # WIP
 
       elsif next?(:KEYWORD, :TRUE)
         pop(:KEYWORD)
-        @vm_writer.write_push(:CONST, 1)
-        @vm_writer.write_arithmetic(:NEG)
+        @vm_writer.write_push(:CONST, 0)
+        @vm_writer.write_arithmetic(:NOT)
 
       elsif next?(:KEYWORD, [:FALSE, :NULL])
         pop(:KEYWORD)
@@ -380,7 +406,7 @@ class JackCompilationEngine
 
       elsif next?(:KEYWORD, [:TRUE, :FALSE, :NULL, :THIS])
         pop(:KEYWORD)
-        # WIP
+        @vm_writer.write_push(:POINTER, 0)
 
       elsif next?(:IDENTIFIER)
         identifier = pop(:IDENTIFIER)
@@ -393,7 +419,11 @@ class JackCompilationEngine
           compile_expression
           pop(:SYMBOL, ']')
 
-          #WIP
+          index = @symbol_table.index_of(identifier)
+          @vm_writer.write_push(to_segment(kind), index)
+          @vm_writer.write_arithmetic(:ADD)
+          @vm_writer.write_pop(:POINTER, 1)
+          @vm_writer.write_push(:THAT, 0)
 
         elsif next?(:SYMBOL, ['(', '.'])
           subroutine_call(identifier)
@@ -435,15 +465,33 @@ class JackCompilationEngine
       subroutine_name = pop(:IDENTIFIER)
     end
 
-    pop(:SYMBOL, '(')
-    n_args = compile_expression_list
-    pop(:SYMBOL, ')')
+    n_args = 0
 
     if receiver.nil?
-      # WIP
+      # Calling this.method
+      receiver = @class_name
+      @vm_writer.write_push(:POINTER, 0)
+      n_args += 1
+
     else
-      @vm_writer.write_call("#{receiver}.#{subroutine_name}", n_args)
+      kind = @symbol_table.kind_of(receiver)
+      if kind != :NONE
+        # Calling that.method
+        # NOTE: Need to deny access field variable from function?
+        index = @symbol_table.index_of(receiver)
+        receiver = @symbol_table.type_of(receiver)
+        @vm_writer.write_push(to_segment(kind), index)
+        n_args += 1
+      else
+        # Calling function (nothing to prepare; just call it!)
+      end
     end
+
+    pop(:SYMBOL, '(')
+    n_args += compile_expression_list
+    pop(:SYMBOL, ')')
+
+    @vm_writer.write_call("#{receiver}.#{subroutine_name}", n_args)
 
   end
 
@@ -553,17 +601,19 @@ require_relative 'jack_tokenizer'
 src =<<EOS
 class Klass {
   static int count, total;
-  field boolean valid;
+  field boolean valid, pnum, nnum;
 
   constructor Klass new(int a, int b) {
     var int i, j, k;
+    var int min, max;
     var Array list;
+    var boolean flag;
 
     do initialize();
     let i[j] = k;
 
-    if (valid & total = f) {
-      do foo(a, this, c);
+    if (valid & total = i) {
+      do foo(a, this, b);
       do Array.new(true);
     }
     else {
@@ -578,6 +628,10 @@ class Klass {
   }
 
   method void task() {
+    var Array foo;
+    var char bar, baz, bit;
+    var int foobar;
+
     let pnum = 1234;
     let nnum = -3456;
     do foo.bar(baz(), "foo", bar + (3 * -2));

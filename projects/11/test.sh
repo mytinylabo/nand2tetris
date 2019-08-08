@@ -39,3 +39,20 @@ do
     ../../tools/TextComparer.sh ${src}.xml $tmp_path
     rm $tmp_path
 done
+
+echo 'Compiling test projects...'
+
+list=(
+    ./Seven
+    ./ConvertToBin
+    ./Square
+    ./Average
+)
+
+for src in ${list[@]}
+do
+    echo $src
+    rm -f ${src}/*.vm
+    cp ../../tools/OS/*.vm ${src}
+    ./jack/jack.rb ${src}
+done
