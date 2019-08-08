@@ -197,11 +197,11 @@ class JackCompilationEngine
       end
 
       segment = to_segment(kind)
-
       index = @symbol_table.index_of(var_name)
 
-      # Indexer
       if next?(:SYMBOL, '[')
+        # Indexer access
+
         # Gets the base pointer
         @vm_writer.write_push(segment, index)
 
@@ -212,17 +212,27 @@ class JackCompilationEngine
         # Offsets the pointer
         @vm_writer.write_arithmetic(:ADD)
 
-        # Saves to `that` segment
+        pop(:SYMBOL, '=')
+
+        compile_expression
+
+        # Pop the right value from the stack
+        # to retrieve the left pointer behind it
+        @vm_writer.write_pop(:TEMP, 0)
+
+        # Sets the left pointer to `that`
         @vm_writer.write_pop(:POINTER, 1)
-        segment = :THAT
-        index = 0
+
+        # Moves the right value to the address the left points
+        @vm_writer.write_push(:TEMP, 0)
+        @vm_writer.write_pop(:THAT, 0)
+
+      else
+        # Simple assign
+        pop(:SYMBOL, '=')
+        compile_expression
+        @vm_writer.write_pop(segment, index)
       end
-
-      pop(:SYMBOL, '=')
-
-      compile_expression
-
-      @vm_writer.write_pop(segment, index)
 
       pop(:SYMBOL, ';')
 
@@ -392,8 +402,14 @@ class JackCompilationEngine
         @vm_writer.write_push(:CONST, int_val)
 
       elsif next?(:STRING_CONST)
-        pop(:STRING_CONST)
-        # WIP
+        str = pop(:STRING_CONST).tr('"', '')
+
+        @vm_writer.write_push(:CONST, str.length + 1)
+        @vm_writer.write_call('String.new', 1)
+        str.each_char do |char|
+          @vm_writer.write_push(:CONST, char.ord)
+          @vm_writer.write_call('String.appendChar', 2)
+        end
 
       elsif next?(:KEYWORD, :TRUE)
         pop(:KEYWORD)

@@ -47,6 +47,8 @@ list=(
     ./ConvertToBin
     ./Square
     ./Average
+    ./Pong
+    ./ComplexArrays
 )
 
 for src in ${list[@]}
